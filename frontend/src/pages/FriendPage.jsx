@@ -5,48 +5,82 @@ import {
   getRecommendedUsers,
   getUserFriends,
   sendFriendRequest,
+  getStreamToken,
 } from "../lib/api";
 import { Link } from "react-router";
 import { CheckCircleIcon, MapPinIcon, UserPlusIcon, UsersIcon } from "lucide-react";
+import { StreamChat } from "stream-chat";
+import useAuthUser from "../hooks/useAuthUser";
 
 import { capitialize } from "../lib/utils";
-
-import FriendCard, { getLanguageFlag } from "../components/FriendCard";
+import FriendCard from "../components/FriendCard";
 import NoFriendsFound from "../components/NoFriendsFound";
+
+const STREAM_API_KEY = import.meta.env.VITE_STREAM_API_KEY;
 
 const FriendPage = () => {
   const queryClient = useQueryClient();
-  const [outgoingRequestsIds, setOutgoingRequestsIds] = useState(new Set());
+  const { authUser } = useAuthUser();
+  const [chatClient, setChatClient] = useState(null);
 
-  const { data: friends = [], isLoading: loadingFriends } = useQuery({
-    queryKey: ["friends"],
-    queryFn: getUserFriends,
-  });
-
-  const { data: recommendedUsers = [], isLoading: loadingUsers } = useQuery({
-    queryKey: ["users"],
-    queryFn: getRecommendedUsers,
-  });
-
-  const { data: outgoingFriendReqs } = useQuery({
-    queryKey: ["outgoingFriendReqs"],
-    queryFn: getOutgoingFriendReqs,
-  });
-
-  const { mutate: sendRequestMutation, isPending } = useMutation({
-    mutationFn: sendFriendRequest,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["outgoingFriendReqs"] }),
+  const { data: tokenData } = useQuery({
+    queryKey: ["streamToken"],
+    queryFn: getStreamToken,
+    enabled: !!authUser,
   });
 
   useEffect(() => {
-    const outgoingIds = new Set();
-    if (outgoingFriendReqs && outgoingFriendReqs.length > 0) {
-      outgoingFriendReqs.forEach((req) => {
-        outgoingIds.add(req.recipient._id);
+    if (!tokenData?.token || !authUser) return;
+
+    const client = StreamChat.getInstance(STREAM_API_KEY);
+
+    const connectStreamUser = async () => {
+      if (client.userID === authUser._id) {
+        setChatClient(client);
+        return;
+      }
+
+      try {
+        await client.connectUser(
+          {
+            id: authUser._id,
+            name: authUser.fullName,
+            image: authUser.profilePic,
+          },
+          tokenData.token
+        );
+        setChatClient(client);
+      } catch (error) {
+        console.error("Error connecting to Stream:", error);
+      }
+    };
+
+    connectStreamUser();
+  }, [tokenData, authUser]);
+
+  const { data: friends = [], isLoading: loadingFriends } = useQuery({
+    queryKey: ["friends", chatClient?.userID],
+    queryFn: async () => {
+      const backendFriends = await getUserFriends();
+      
+      if (!backendFriends || backendFriends.length === 0 || !chatClient) {
+        return backendFriends || [];
+      }
+
+      const friendIds = backendFriends.map((f) => f._id);
+      const response = await chatClient.queryUsers({ id: { $in: friendIds } });
+      return backendFriends.map((f) => {
+        const streamUser = response.users.find((u) => u.id === f._id);
+        return {
+          ...f,
+          online: streamUser?.online || false,
+          last_active: streamUser?.last_active,
+        };
       });
-      setOutgoingRequestsIds(outgoingIds);
-    }
-  }, [outgoingFriendReqs]);
+    },
+    enabled: !!chatClient,
+    refetchInterval: 5000, 
+  });
 
   return (
     <div className="p-4 sm:p-6 lg:p-8">
@@ -61,7 +95,7 @@ const FriendPage = () => {
 
         {loadingFriends ? (
           <div className="flex justify-center py-12">
-            <span className="loading loading-spinner loading-lg" />
+            <span className="loading loading-spinner loading-lg text-primary" />
           </div>
         ) : friends.length === 0 ? (
           <NoFriendsFound />

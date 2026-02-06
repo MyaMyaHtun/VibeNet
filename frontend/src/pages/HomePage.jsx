@@ -5,22 +5,85 @@ import {
   getRecommendedUsers,
   getUserFriends,
   sendFriendRequest,
+  getStreamToken,
 } from "../lib/api";
 import { Link } from "react-router";
 import { CheckCircleIcon, MapPinIcon, UserPlusIcon, UsersIcon } from "lucide-react";
+import { StreamChat } from "stream-chat";
+import useAuthUser from "../hooks/useAuthUser";
 
 import { capitialize } from "../lib/utils";
-
 import FriendCard, { getLanguageFlag } from "../components/FriendCard";
 import NoFriendsFound from "../components/NoFriendsFound";
 
+const STREAM_API_KEY = import.meta.env.VITE_STREAM_API_KEY;
+
 const HomePage = () => {
   const queryClient = useQueryClient();
+  const { authUser } = useAuthUser();
   const [outgoingRequestsIds, setOutgoingRequestsIds] = useState(new Set());
+  const [chatClient, setChatClient] = useState(null);
 
+  const { data: tokenData } = useQuery({
+    queryKey: ["streamToken"],
+    queryFn: getStreamToken,
+    enabled: !!authUser,
+  });
+
+  useEffect(() => {
+    if (!tokenData?.token || !authUser) return;
+
+    const client = StreamChat.getInstance(STREAM_API_KEY);
+
+    const connectStreamUser = async () => {
+      if (client.userID === authUser._id) {
+        setChatClient(client);
+        return;
+      }
+
+      try {
+        await client.connectUser(
+          {
+            id: authUser._id,
+            name: authUser.fullName,
+            image: authUser.profilePic,
+          },
+          tokenData.token
+        );
+        setChatClient(client);
+        console.log("VibeNet: Stream Connected & Online ");
+      } catch (error) {
+        console.error("VibeNet: Stream Connection Error:", error);
+      }
+    };
+
+    connectStreamUser();
+
+    return () => {
+    };
+  }, [tokenData, authUser]);
   const { data: friends = [], isLoading: loadingFriends } = useQuery({
-    queryKey: ["friends"],
-    queryFn: getUserFriends,
+    queryKey: ["friends", chatClient?.userID], 
+    queryFn: async () => {
+      const backendFriends = await getUserFriends();
+      
+      if (!backendFriends || backendFriends.length === 0 || !chatClient) {
+        return backendFriends || [];
+      }
+
+      const friendIds = backendFriends.map((f) => f._id);
+      const response = await chatClient.queryUsers({ id: { $in: friendIds } });
+      return backendFriends.map((f) => {
+        const streamUser = response.users.find((u) => u.id === f._id);
+        return {
+          ...f,
+          online: streamUser?.online || false, 
+          last_active: streamUser?.last_active,
+        };
+      });
+    },
+    enabled: !!chatClient, 
+    refetchInterval: 5000,
   });
 
   const { data: recommendedUsers = [], isLoading: loadingUsers } = useQuery({
@@ -61,7 +124,7 @@ const HomePage = () => {
 
         {loadingFriends ? (
           <div className="flex justify-center py-12">
-            <span className="loading loading-spinner loading-lg" />
+            <span className="loading loading-spinner loading-lg text-primary" />
           </div>
         ) : friends.length === 0 ? (
           <NoFriendsFound />
@@ -73,7 +136,7 @@ const HomePage = () => {
           </div>
         )}
 
-        <section>
+        <section className="pt-10 border-t border-base-300">
           <div className="mb-6 sm:mb-8">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div>
@@ -87,10 +150,10 @@ const HomePage = () => {
 
           {loadingUsers ? (
             <div className="flex justify-center py-12">
-              <span className="loading loading-spinner loading-lg" />
+              <span className="loading loading-spinner loading-lg text-secondary" />
             </div>
           ) : recommendedUsers.length === 0 ? (
-            <div className="card bg-base-200 p-6 text-center">
+            <div className="card bg-base-200 p-6 text-center border border-dashed border-base-300">
               <h3 className="font-semibold text-lg mb-2">No recommendations available</h3>
               <p className="text-base-content opacity-70">
                 Check back later for new language partners!
@@ -102,18 +165,14 @@ const HomePage = () => {
                 const hasRequestBeenSent = outgoingRequestsIds.has(user._id);
 
                 return (
-                  <div
-                    key={user._id}
-                    className="card bg-base-200 hover:shadow-lg transition-all duration-300"
-                  >
+                  <div key={user._id} className="card bg-base-200 hover:shadow-xl transition-all duration-300 border border-base-300">
                     <div className="card-body p-5 space-y-4">
                       <div className="flex items-center gap-3">
-                        <div className="avatar size-16 rounded-full">
-                          <img src={user.profilePic} alt={user.fullName} />
+                        <div className="avatar size-16">
+                          <img src={user.profilePic} alt={user.fullName} className="rounded-full object-cover" />
                         </div>
-
                         <div>
-                          <h3 className="font-semibold text-lg">{user.fullName}</h3>
+                          <h3 className="font-bold text-lg">{user.fullName}</h3>
                           {user.location && (
                             <div className="flex items-center text-xs opacity-70 mt-1">
                               <MapPinIcon className="size-3 mr-1" />
@@ -122,39 +181,26 @@ const HomePage = () => {
                           )}
                         </div>
                       </div>
-
-                      {/* Languages with flags */}
                       <div className="flex flex-wrap gap-1.5">
-                        <span className="badge badge-secondary">
+                        <span className="badge badge-secondary badge-sm py-2.5">
                           {getLanguageFlag(user.nativeLanguage)}
                           Native: {capitialize(user.nativeLanguage)}
                         </span>
-                        <span className="badge badge-outline">
+                        <span className="badge badge-outline badge-sm py-2.5">
                           {getLanguageFlag(user.learningLanguage)}
                           Learning: {capitialize(user.learningLanguage)}
                         </span>
                       </div>
-
-                      {user.bio && <p className="text-sm opacity-70">{user.bio}</p>}
-
-                      {/* Action button */}
+                      {user.bio && <p className="text-sm opacity-70 line-clamp-2">{user.bio}</p>}
                       <button
-                        className={`btn w-full mt-2 ${
-                          hasRequestBeenSent ? "btn-disabled" : "btn-primary"
-                        } `}
+                        className={`btn w-full mt-2 ${hasRequestBeenSent ? "btn-disabled" : "btn-primary"}`}
                         onClick={() => sendRequestMutation(user._id)}
                         disabled={hasRequestBeenSent || isPending}
                       >
                         {hasRequestBeenSent ? (
-                          <>
-                            <CheckCircleIcon className="size-4 mr-2" />
-                            Request Sent
-                          </>
+                          <><CheckCircleIcon className="size-4 mr-2" /> Request Sent</>
                         ) : (
-                          <>
-                            <UserPlusIcon className="size-4 mr-2" />
-                            Send Friend Request
-                          </>
+                          <><UserPlusIcon className="size-4 mr-2" /> Send Friend Request</>
                         )}
                       </button>
                     </div>

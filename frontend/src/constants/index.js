@@ -163,6 +163,7 @@ export const THEMES = [
 ];
 
 export const LANGUAGES = [
+  "Myanmar",
   "English",
   "Spanish",
   "French",
@@ -180,6 +181,7 @@ export const LANGUAGES = [
 ];
 
 export const LANGUAGE_TO_FLAG = {
+  myanmar: "mm",
   english: "gb",
   spanish: "es",
   french: "fr",
