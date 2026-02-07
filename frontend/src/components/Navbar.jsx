@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router";
 import useAuthUser from "../hooks/useAuthUser";
-import { BellIcon, LogOutIcon, ShipWheelIcon } from "lucide-react";
+import { BellIcon, LogOutIcon, UserIcon } from "lucide-react"; 
 import ThemeSelector from "./ThemeSelector";
 import useLogout from "../hooks/useLogout";
 
@@ -8,13 +8,6 @@ const Navbar = () => {
   const { authUser } = useAuthUser();
   const location = useLocation();
   const isChatPage = location.pathname?.startsWith("/chat");
-
-  // const queryClient = useQueryClient();
-  // const { mutate: logoutMutation } = useMutation({
-  //   mutationFn: logout,
-  //   onSuccess: () => queryClient.invalidateQueries({ queryKey: ["authUser"] }),
-  // });
-
   const { logoutMutation } = useLogout();
 
   return (
@@ -43,10 +36,27 @@ const Navbar = () => {
 
           {/* TODO */}
           <ThemeSelector />
-
-          <div className="avatar">
+          <div className="px-2">
             <div className="w-9 rounded-full">
-              <img src={authUser?.profilePic} alt="User Avatar" rel="noreferrer" />
+               </div>
+          <div className="w-9 rounded-full">
+          <Link to="/profile" className="flex items-center">
+              <div className="avatar transition-transform hover:scale-105">
+                <div className="w-10 h-10 rounded-full ring ring-primary ring-offset-base-100 ring-offset-2 overflow-hidden bg-base-300">
+                  {authUser?.profilePic ? (
+                    <img 
+                      src={authUser.profilePic} 
+                      alt="User Avatar" 
+                      className="object-cover w-full h-full"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center w-full h-full bg-base-300">
+                      <UserIcon className="w-6 h-6 opacity-50" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            </Link>
             </div>
           </div>
 

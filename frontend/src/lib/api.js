@@ -63,3 +63,16 @@ export async function getStreamToken() {
   const response = await axiosInstance.get("/chat/token");
   return response.data;
 }
+
+export const cancelFriendRequest = async (recipientId) => {
+  const response = await axiosInstance.post(`/users/cancel-request/${recipientId}`);
+  return response.data;
+}
+export const unfriend = async (friendId) => {
+  const response = await axiosInstance.post(`/users/unfriend/${friendId}`);
+  return response.data;
+}
+export const updateProfile = async (data) => {
+  const response = await axiosInstance.put("/users/update-profile", data);
+  return response.data;
+};

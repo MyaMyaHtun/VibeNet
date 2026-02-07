@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import FriendRequest from "../models/FriendRequest.js";
+import cloudinary from "../lib/cloudinary.js";
 
 export async function getRecommendedUsers(req, res) {
   try {
@@ -146,3 +147,107 @@ export async function getOutgoingFriendReqs(req, res) {
     res.status(500).json({ message: "Internal Server Error" });
   }
 }
+
+export async function cancelFriendRequest(req, res) {
+  try {
+    const myId = req.user.id;
+    const { id: recipientId } = req.params;
+    const deletedRequest = await FriendRequest.findOneAndDelete({
+      sender: myId,
+      recipient: recipientId,
+      status: "pending",
+    });
+
+    if (!deletedRequest) {
+      return res.status(404).json({ message: "Friend request not found or already processed" });
+    }
+
+    res.status(200).json({ message: "Friend request cancelled successfully" });
+  } catch (error) {
+    console.error("Error in cancelFriendRequest controller", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+
+
+export async function unfriend(req, res) {
+  try {
+    const myId = req.user.id;
+    const { id: friendId } = req.params;
+    await User.findByIdAndUpdate(myId, {
+      $pull: { friends: friendId },
+    });
+    await User.findByIdAndUpdate(friendId, {
+      $pull: { friends: myId },
+    });
+    await FriendRequest.findOneAndDelete({
+      $or: [
+        { sender: myId, recipient: friendId },
+        { sender: friendId, recipient: myId },
+      ],
+    });
+
+    res.status(200).json({ message: "Unfriended successfully" });
+  } catch (error) {
+    console.error("Error in unfriend controller", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+}
+// export const updateProfile = async (req, res) => {
+//   try {
+//     const { fullName, bio, nativeLanguage, learningLanguage, location, profilePic } = req.body;
+//     const userId = req.user._id;
+
+//     let profilePicUrl;
+//     if (profilePic) {
+//       const uploadResponse = await cloudinary.uploader.upload(profilePic);
+//       profilePicUrl = uploadResponse.secure_url;
+//     }
+
+//     const updatedUser = await User.findByIdAndUpdate(
+//       userId,
+//       {
+//         fullName,
+//         bio,
+//         nativeLanguage,
+//         learningLanguage,
+//         location,
+//         ...(profilePicUrl && { profilePic: profilePicUrl }), 
+//       },
+//       { new: true } 
+//     );
+
+//     res.status(200).json(updatedUser);
+//   } catch (error) {
+//     console.error("Error in updateProfile:", error);
+//     res.status(500).json({ message: "Internal Server Error" });
+//   }
+// };
+export const updateProfile = async (req, res) => {
+  try {
+    const { fullName, bio, nativeLanguage, learningLanguage, location, profilePic } = req.body;
+    const userId = req.user._id;
+    const updateData = {
+      fullName,
+      bio,
+      nativeLanguage,
+      learningLanguage,
+      location,
+    };
+
+    if (profilePic) {
+      updateData.profilePic = profilePic; 
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      updateData,
+      { new: true }
+    ).select("-password");
+
+    res.status(200).json(updatedUser);
+  } catch (error) {
+    console.error("Error in updateProfile:", error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};

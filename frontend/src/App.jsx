@@ -15,6 +15,7 @@ import useAuthUser from "./hooks/useAuthUser.js";
 import Layout from "./components/Layout.jsx";
 import { useThemeStore } from "./store/useThemeStore.js";
 import FriendPage from "./pages/FriendPage.jsx";
+import ProfilePage from "./pages/ProfilePage.jsx";
 
 const App = () => {
   const { isLoading, authUser } = useAuthUser();
@@ -128,8 +129,19 @@ const App = () => {
             )
           }
         />
+        <Route
+          path="/profile"
+          element={
+            isAuthenticated ? (
+              <Layout showSidebar={true}>
+                <ProfilePage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
       </Routes>
-
       <Toaster />
     </div>
   );
