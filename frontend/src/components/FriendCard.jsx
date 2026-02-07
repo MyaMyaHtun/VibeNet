@@ -3,12 +3,13 @@ import { LANGUAGE_TO_FLAG } from "../constants";
 import { formatDistanceToNow } from "date-fns";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { unfriend } from "../lib/api";
-import { UserMinusIcon, MessageCircleIcon } from "lucide-react"; 
+import { UserMinusIcon, MessageCircleIcon, BellIcon } from "lucide-react"; 
 
 const FriendCard = ({ friend }) => {
   const queryClient = useQueryClient();
   const isOnline = friend.online;
   const lastActive = friend.last_active;
+  const unreadCount = friend.unread_count || 0;
 
   // Unfriend Mutation
   const { mutate: unfriendMutation, isPending } = useMutation({
@@ -20,13 +21,13 @@ const FriendCard = ({ friend }) => {
   });
 
   const handleUnfriend = () => {
-    if (window.confirm(`Are ${friend.fullName} unfriend?`)) {
+    if (window.confirm(`Are you sure you want to unfriend ${friend.fullName}?`)) {
       unfriendMutation(friend._id);
     }
   };
 
   return (
-    <div className="card bg-base-200 hover:shadow-md transition-all duration-300 border border-base-300">
+    <div className={`card bg-base-200 hover:shadow-md transition-all duration-300 border ${unreadCount > 0 ? 'border-primary ring-1 ring-primary shadow-lg scale-[1.01]' : 'border-base-300'}`}>
       <div className="card-body p-4">
         <div className="flex items-center gap-3 mb-4">
           <div className="relative">
@@ -37,14 +38,24 @@ const FriendCard = ({ friend }) => {
                 className="rounded-full object-cover border border-base-300"
               />
             </div>
+            
+            {/* Online Status Dot */}
             {isOnline && (
               <span className="absolute bottom-0 right-0 size-3.5 bg-success border-2 border-base-200 rounded-full shadow-sm"></span>
+            )}
+
+            {/* NEW MESSAGE BADGE */}
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 badge badge-primary badge-xs py-2 px-1.5 animate-bounce font-bold shadow-sm">
+                {unreadCount}
+              </span>
             )}
           </div>
           
           <div className="flex flex-col min-w-0">
-            <h3 className="font-bold text-sm sm:text-base truncate tracking-tight">
+            <h3 className="font-bold text-sm sm:text-base truncate tracking-tight flex items-center gap-1.5">
               {friend.fullName}
+              {unreadCount > 0 && <BellIcon className="size-3 text-primary animate-pulse fill-primary" />}
             </h3>
             <p className="text-[11px] leading-none mt-1">
               {isOnline ? (
@@ -63,22 +74,21 @@ const FriendCard = ({ friend }) => {
         <div className="flex flex-wrap gap-1.5 mb-4">
           <span className="badge badge-secondary badge-sm py-2.5 gap-1 font-medium">
             {getLanguageFlag(friend.nativeLanguage)}
-            Native: {friend.nativeLanguage}
+            {capitialize(friend.nativeLanguage)}
           </span>
           <span className="badge badge-outline badge-sm py-2.5 gap-1 font-medium italic">
             {getLanguageFlag(friend.learningLanguage)}
-            Learning: {friend.learningLanguage}
+            Learning: {capitialize(friend.learningLanguage)}
           </span>
         </div>
 
         <div className="flex gap-2">
-          {/* Message Button */}
           <Link 
             to={`/chat/${friend._id}`} 
-            className="btn btn-primary btn-sm flex-1 normal-case font-semibold tracking-wide"
+            className={`btn btn-sm flex-1 normal-case font-semibold tracking-wide ${unreadCount > 0 ? 'btn-primary animate-pulse' : 'btn-outline border-base-300'}`}
           >
             <MessageCircleIcon className="size-4 mr-1" />
-            Message
+            {unreadCount > 0 ? "New Message" : "Send Message"}
           </Link>
 
           {/* Unfriend Button */}
@@ -102,12 +112,16 @@ const FriendCard = ({ friend }) => {
 
 export default FriendCard;
 
+// Utils
+function capitialize(str) {
+  if (!str) return "";
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
 export function getLanguageFlag(language) {
   if (!language) return null;
-
   const langLower = language.toLowerCase();
   const countryCode = LANGUAGE_TO_FLAG[langLower];
-
   if (countryCode) {
     return (
       <img
